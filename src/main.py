@@ -189,12 +189,13 @@ def main():
     monitor.status_changed.connect(tray_mgr.on_status_changed)
     monitor.projects_updated.connect(tray_mgr.refresh_projects)
 
-    # ── 运行标记（供 Claude Code hook 检测避免重复启动）──
+    # ── 运行标记（供 Claude Code hook PID 存活检测）──
     RUNNING_MARKER = os.path.join(
         os.path.expanduser("~"), ".agent-status", ".overlay.running"
     )
     os.makedirs(os.path.dirname(RUNNING_MARKER), exist_ok=True)
-    Path(RUNNING_MARKER).touch()
+    with open(RUNNING_MARKER, "w") as _f:
+        _f.write(str(os.getpid()))
 
     # ── 退出清理 ──
     def on_quit():

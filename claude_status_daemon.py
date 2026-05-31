@@ -30,6 +30,16 @@ TOOL_STATUS = {
 }
 
 
+_marker_path = None  # 模块级，main() 中设置
+
+def touch_marker():
+    """刷新标记文件时间戳（证明进程存活）"""
+    if _marker_path:
+        try:
+            os.utime(_marker_path, None)
+        except OSError:
+            pass
+
 def write_status(status: str, message: str):
     """原子写入状态文件"""
     payload = {
@@ -43,6 +53,7 @@ def write_status(status: str, message: str):
     with open(tmp, "w", encoding="utf-8") as f:
         json.dump(payload, f, ensure_ascii=False)
     os.replace(tmp, dst)
+    touch_marker()
 
 
 def is_recent(ts_str: str) -> bool:
@@ -151,6 +162,13 @@ def find_latest_reasonix() -> Path | None:
 
 
 def main():
+    global _marker_path
+    # ── 最早阶段：创建运行标记（独立文件，不跟 overlay 抢）──
+    _marker_path = os.path.join(STATE_DIR, ".statusd.running")
+    os.makedirs(STATE_DIR, exist_ok=True)
+    with open(_marker_path, "w") as f:
+        f.write(str(os.getpid()))
+
     print(f"[statusd] 启动: project={PROJECT}, state_dir={STATE_DIR}")
     write_status("idle", "守护进程启动")
 
