@@ -282,6 +282,18 @@ class DynamicIsland(QWidget):
 
         # 分隔点
         if msg.message:
+            # 项目名（小标签）
+            if self._project_name and self._project_name != "default":
+                proj_tag = f"@{self._project_name}"
+                tag_font = QFont("Microsoft YaHei", 8)
+                tag_font.setStyleHint(QFont.StyleHint.SansSerif)
+                painter.setFont(tag_font)
+                painter.setPen(QColor("#585b70"))
+                t_fm = QFontMetrics(tag_font)
+                tag_w = t_fm.horizontalAdvance(proj_tag)
+                painter.drawText(x, h // 2 + t_fm.ascent() // 2 - 1, proj_tag)
+                x += tag_w + 6
+
             sep_font = QFont("Microsoft YaHei", 9)
             sep_font.setStyleHint(QFont.StyleHint.SansSerif)
             painter.setPen(QColor("#6c7086"))

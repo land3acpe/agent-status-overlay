@@ -95,12 +95,25 @@ def configure_hooks():
     # 读取类工具
     read_tools = "Read|Search|Glob|Grep|List"
 
+    # ── 自动启动 overlay daemon（Claude Code 启动时拉起）──
+    _overlay_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    _overlay_root_fwd = _overlay_root.replace("\\", "/")
+    _marker_path_fwd = os.path.join(STATE_DIR, ".overlay.running").replace("\\", "/")
+    _auto_start_cmd = (
+        f'if [ ! -f {_marker_path_fwd} ]; then '
+        f'pythonw {_overlay_root_fwd}/run.py & fi '
+        f'# {HOOK_MARKER}'
+    )
+
     # Hook 事件 → 状态映射
     desired = {
         "SessionStart": [
             {"matcher": "",
              "hooks": [{"type": "command",
-                        "command": _write_state_json("idle", "")}]}
+                        "command": _write_state_json("idle", "")}]},
+            {"matcher": "",
+             "hooks": [{"type": "command",
+                        "command": _auto_start_cmd}]},
         ],
         "UserPromptSubmit": [
             {"matcher": "",

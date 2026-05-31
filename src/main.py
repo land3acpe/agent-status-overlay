@@ -1,8 +1,9 @@
-"""AgentStatusOverlay 入口：系统托盘 + 灵动岛悬浮窗 + 多项目"""
+"""AgentStatusOverlay 入口：系统托盘 + 多项目灵动岛悬浮窗 + 自动堆叠"""
 import sys
 import os
 import atexit
 import signal
+from pathlib import Path
 
 from PyQt6.QtWidgets import (
     QApplication, QSystemTrayIcon, QMenu
@@ -10,17 +11,23 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtGui import QIcon, QAction
 
 try:
-    from .overlay import DynamicIsland
+    from .overlay import DynamicIsland, CAPSULE_HEIGHT, TOP_MARGIN
     from .monitor import StatusMonitor, DEFAULT_STATE_DIR
     from .hooks import configure_hooks, restore_config, write_status_manually
     from .socket_server import SocketServer
     from .reasonix_monitor import ReasonixMonitor
+    from .claude_monitor import ClaudeCodeMonitor
+    from .overlay_manager import OverlayManager
+    from .protocol import MAX_VISIBLE_OVERLAYS
 except ImportError:
-    from overlay import DynamicIsland
+    from overlay import DynamicIsland, CAPSULE_HEIGHT, TOP_MARGIN
     from monitor import StatusMonitor, DEFAULT_STATE_DIR
     from hooks import configure_hooks, restore_config, write_status_manually
     from socket_server import SocketServer
     from reasonix_monitor import ReasonixMonitor
+    from claude_monitor import ClaudeCodeMonitor
+    from overlay_manager import OverlayManager
+    from protocol import MAX_VISIBLE_OVERLAYS
 
 
 def _resource_path(relative_path: str) -> str:
@@ -32,13 +39,14 @@ def _resource_path(relative_path: str) -> str:
 
 
 class TrayManager:
-    """系统托盘管理：动态项目菜单"""
+    """系统托盘管理：动态项目菜单 + 全局显示控制"""
 
-    def __init__(self, app: QApplication, overlay: DynamicIsland,
+    def __init__(self, app: QApplication, overlay_mgr: OverlayManager,
                  monitor: StatusMonitor):
         self.app = app
-        self.overlay = overlay
+        self.overlay_mgr = overlay_mgr
         self.monitor = monitor
+        self._show_all = True
         self._project_actions: list[QAction] = []
 
         icon_path = _resource_path("resources/icon.png")
@@ -51,35 +59,39 @@ class TrayManager:
     def _build_menu(self):
         menu = QMenu()
 
-        # 当前状态
+        # 标题
         menu.addAction("AgentStatusOverlay").setEnabled(False)
         menu.addSeparator()
 
-        # 显示/隐藏
+        # 全局显示/隐藏
         show_action = QAction("显示悬浮窗", menu)
         show_action.setCheckable(True)
-        show_action.setChecked(True)
-        show_action.triggered.connect(
-            lambda checked: self.overlay.setVisible(checked)
-        )
+        show_action.setChecked(self._show_all)
+        show_action.triggered.connect(self._toggle_global_visible)
         menu.addAction(show_action)
 
-        # ── 项目列表 ──
+        # ── 活跃项目列表 ──
         menu.addSeparator()
-        menu.addAction("📁 项目").setEnabled(False)
+        active = self.overlay_mgr.active_projects()
+        all_projects = self.overlay_mgr.all_projects()
 
-        projects = self.monitor.list_projects()
+        if active:
+            menu.addAction(f"📁 活跃 ({len(active)}/{min(len(all_projects), MAX_VISIBLE_OVERLAYS)})").setEnabled(False)
+        else:
+            menu.addAction("📁 项目（空闲中）").setEnabled(False)
+
         self._project_actions.clear()
-        for p in projects:
-            action = QAction(f"  {p}", menu)
-            action.setCheckable(True)
-            if p == self.monitor.active_project:
-                action.setChecked(True)
-            action.triggered.connect(
-                lambda checked, name=p: self._switch_project(name)
-            )
+        display_projects = all_projects[:MAX_VISIBLE_OVERLAYS] if all_projects else []
+        for p in display_projects:
+            is_active = p in active
+            icon = "🟢" if is_active else "⚫"
+            action = QAction(f"  {icon} {p}", menu)
+            action.setEnabled(False)
             self._project_actions.append(action)
             menu.addAction(action)
+
+        if len(all_projects) > MAX_VISIBLE_OVERLAYS:
+            menu.addAction(f"  ... 共 {len(all_projects)} 个项目").setEnabled(False)
 
         # ── 测试状态 ──
         menu.addSeparator()
@@ -94,12 +106,19 @@ class TrayManager:
             ("waiting", "等待确认"),
             ("error", "错误"),
         ]
+        # 选择一个目标项目写入测试数据
+        target = (active[0] if active
+                  else all_projects[0] if all_projects
+                  else "default")
+
+        status_menu.addAction(f"→ {target}").setEnabled(False)
+        status_menu.addSeparator()
+
         for status, label in test_states:
             action = QAction(f"{label} ({status})", menu)
             action.triggered.connect(
-                lambda checked, s=status, l=label: write_status_manually(
-                    s, l, self.monitor.active_project
-                )
+                lambda checked, s=status, l=label, p=target:
+                    self.overlay_mgr.write_test_status(s, l, p)
             )
             status_menu.addAction(action)
 
@@ -110,21 +129,17 @@ class TrayManager:
 
         self.tray.setContextMenu(menu)
 
-    def _switch_project(self, name: str):
-        self.monitor.set_active_project(name)
-        self.overlay.set_project(name)
-        self._build_menu()  # 刷新勾选状态
-
-    def refresh_projects(self, projects: list[str]):
-        """projects_updated 回调：重建菜单"""
-        self._build_menu()
+    def _toggle_global_visible(self, checked: bool):
+        self._show_all = checked
+        self.overlay_mgr.set_global_visible(checked)
 
     def on_status_changed(self, msg, project: str):
-        """状态变化回调"""
-        if not self.overlay.isVisible():
-            self.overlay.show()
-        self.overlay.set_project(project)
-        self.overlay.update_status(msg)
+        """状态变化 → 刷新托盘菜单"""
+        self._build_menu()
+
+    def refresh_projects(self, projects: list[str]):
+        """项目列表变化 → 刷新托盘菜单"""
+        self._build_menu()
 
 
 def main():
@@ -143,38 +158,55 @@ def main():
     app.setQuitOnLastWindowClosed(False)
     app.setApplicationName("AgentStatusOverlay")
 
-    # ── 灵动岛悬浮窗 ──
-    overlay = DynamicIsland()
-    overlay.show()
-
-    # ── 状态监听（多项目自动检测）──
+    # ── 状态监听（追踪全部项目）──
     monitor = StatusMonitor()
     monitor.start()
+
+    # ── 多窗口管理器 ──
+    overlay_mgr = OverlayManager(monitor)
 
     # ── Socket 推送服务 ──
     socket_srv = SocketServer()
     socket_srv.start()
 
-    # ── Reasonix Code 事件监控（直接回调 overlay，低延迟）──
+    # ── Reasonix Code 事件监控（低延迟回调 → OverlayManager）──
     reasonix_mon = ReasonixMonitor(
-        on_status=lambda msg: (overlay.set_project("reasonix"),
-                               overlay.update_status(msg)),
-        on_hide=overlay.hide,
-        on_show=overlay.show,
+        on_status=lambda msg: overlay_mgr.update_status_direct("reasonix", msg),
+        on_hide=lambda: overlay_mgr.hide_project("reasonix"),
+        on_show=lambda: overlay_mgr.show_project("reasonix"),
     )
     reasonix_mon.start()
 
+    # ── Claude Code 事件监控（直接读 session 文件，不依赖 hooks）──
+    claude_mon = ClaudeCodeMonitor(
+        on_status=lambda msg: overlay_mgr.update_status_direct("TianqinWu", msg),
+        project="TianqinWu",
+    )
+    claude_mon.start()
+
     # ── 系统托盘 ──
-    tray_mgr = TrayManager(app, overlay, monitor)
+    tray_mgr = TrayManager(app, overlay_mgr, monitor)
     monitor.status_changed.connect(tray_mgr.on_status_changed)
     monitor.projects_updated.connect(tray_mgr.refresh_projects)
+
+    # ── 运行标记（供 Claude Code hook 检测避免重复启动）──
+    RUNNING_MARKER = os.path.join(
+        os.path.expanduser("~"), ".agent-status", ".overlay.running"
+    )
+    os.makedirs(os.path.dirname(RUNNING_MARKER), exist_ok=True)
+    Path(RUNNING_MARKER).touch()
 
     # ── 退出清理 ──
     def on_quit():
         monitor.stop()
         socket_srv.stop()
         reasonix_mon.stop()
+        claude_mon.stop()
         restore_config()
+        try:
+            Path(RUNNING_MARKER).unlink(missing_ok=True)
+        except Exception:
+            pass
 
     app.aboutToQuit.connect(on_quit)
     sys.exit(app.exec())

@@ -68,3 +68,11 @@ class StatusMessage:
 
     def get_anim(self) -> str:
         return STATUS_STYLE[self.get_status_enum()][2]
+
+    def is_idle(self) -> bool:
+        return self.get_status_enum() == AgentStatus.IDLE
+
+# 悬浮窗堆叠常量
+CAPSULE_GAP = 8          # 窗口间距
+MAX_VISIBLE_OVERLAYS = 6  # 最多同时显示
+IDLE_HIDE_TIMEOUT_MS = 5000  # idle 后隐藏延时
