@@ -121,6 +121,8 @@ class TrayManager:
 
     def on_status_changed(self, msg, project: str):
         """状态变化回调"""
+        if not self.overlay.isVisible():
+            self.overlay.show()
         self.overlay.set_project(project)
         self.overlay.update_status(msg)
 
