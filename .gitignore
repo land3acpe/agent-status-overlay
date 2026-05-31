@@ -12,3 +12,4 @@ venv/
 *.spec
 dist/
 build/
+.agent-status/

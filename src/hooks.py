@@ -151,16 +151,9 @@ def configure_hooks():
              "hooks": [{"type": "command",
                         "command": _write_state_json("thinking", "")}]}
         ],
-        "Stop": [
-            {"matcher": "",
-             "hooks": [{"type": "command",
-                        "command": _write_state_json("idle", "会话结束")}]}
-        ],
-        "SessionEnd": [
-            {"matcher": "",
-             "hooks": [{"type": "command",
-                        "command": _write_state_json("idle", "会话结束")}]}
-        ],
+        # Stop/SessionEnd 已移除：它们在 PermissionRequest 之后触发，
+        # 会把 "waiting" 覆盖成 "idle"，导致等待确认时胶囊显示空闲。
+        # 状态由 PostToolUse → "thinking" 保持，2 分钟后 idle 超时自然隐藏。
     }
 
     for hook_name, new_entries in desired.items():
