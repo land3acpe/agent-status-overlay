@@ -95,23 +95,23 @@ def configure_hooks():
     # 读取类工具
     read_tools = "Read|Search|Glob|Grep|List"
 
-    # ── 自动启动 overlay daemon（Claude Code 启动时拉起）──
+    # ── 自动启动 overlay（Claude Code 启动时拉起）──
+    # 注意：只检查 .overlay.running，不检查 .statusd.running。
+    # daemon 是持久进程，它的 marker 永远新鲜——如果同时检查，overlay 永远不会被拉起。
     _overlay_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     _overlay_root_fwd = _overlay_root.replace("\\", "/")
     _marker_ov = os.path.join(STATE_DIR, ".overlay.running").replace("\\", "/")
-    _marker_sd = os.path.join(STATE_DIR, ".statusd.running").replace("\\", "/")
-    # 文件时间检测：120 秒内有更新 → 进程存活，跳过启动
+    # 文件时间检测：120 秒内有更新 → overlay 进程存活，跳过启动
     _auto_start_cmd = (
         f'need_start=1; '
-        f'for m in {_marker_ov} {_marker_sd}; do '
-        f'  if [ -f "$m" ]; then '
-        f'    now=$(date +%s 2>/dev/null || echo 0); '
-        f'    mtime=$(stat -c %Y "$m" 2>/dev/null || echo 0); '
-        f'    if [ "$now" -gt 0 ] && [ "$mtime" -gt 0 ] && [ $((now - mtime)) -lt 120 ]; then '
-        f'      need_start=0; break; '
-        f'    fi; '
+        f'm="{_marker_ov}"; '
+        f'if [ -f "$m" ]; then '
+        f'  now=$(date +%s 2>/dev/null || echo 0); '
+        f'  mtime=$(stat -c %Y "$m" 2>/dev/null || echo 0); '
+        f'  if [ "$now" -gt 0 ] && [ "$mtime" -gt 0 ] && [ $((now - mtime)) -lt 120 ]; then '
+        f'    need_start=0; '
         f'  fi; '
-        f'done; '
+        f'fi; '
         f'if [ "$need_start" = "1" ]; then '
         f'  pythonw {_overlay_root_fwd}/run.py & fi '
         f'# {HOOK_MARKER}'

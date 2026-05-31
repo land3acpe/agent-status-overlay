@@ -77,15 +77,20 @@ class OverlayManager(QObject):
     def _on_status_changed(self, msg: StatusMessage, project: str):
         is_idle = msg.is_idle()
 
+        # 始终确保 overlay 存在——否则首次 idle 状态时什么都不会显示
+        self._ensure_overlay(project)
+        ov = self._overlays[project]
+        ov.update_status(msg)
+
         if is_idle:
-            # idle：启动隐藏倒计时
+            # idle：显示（低透明度），然后启动隐藏倒计时
+            if self._visible:
+                ov.show()
+            self._reposition()
             self._schedule_idle_hide(project)
         else:
-            # 活跃：取消隐藏计时，确保 overlay 存在并显示
+            # 活跃：取消隐藏计时，确保显示
             self._cancel_idle_timer(project)
-            self._ensure_overlay(project)
-            ov = self._overlays[project]
-            ov.update_status(msg)
             if self._visible:
                 ov.show()
             self._reposition()
