@@ -7,7 +7,7 @@ from pathlib import Path
 # ── 配置 ──
 CLAUDE_CONFIG = os.path.expanduser("~/.claude/settings.json")
 STATE_DIR = os.path.expanduser("~/.agent-status")
-BACKUP_PATH = os.path.join(STATE_DIR, "settings_backup.json")
+BACKUP_PATH = os.path.join(os.path.expanduser("~/.claude"), "settings_backup.json")
 HOOK_MARKER = "agent_status_overlay"
 
 
@@ -118,6 +118,7 @@ def configure_hooks():
     )
 
     # Hook 事件 → 状态映射
+    # 状态同步由 hooks 独家负责（daemon 和 ClaudeCodeMonitor 已移除，避免多写手竞争）。
     desired = {
         "SessionStart": [
             {"matcher": "",

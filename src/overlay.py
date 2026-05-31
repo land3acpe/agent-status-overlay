@@ -1,5 +1,4 @@
 """DynamicIsland: 灵动岛悬浮窗 — PyQt6 无边框 + 透明 + 置顶胶囊"""
-import ctypes
 import time
 from PyQt6.QtCore import (
     Qt, QTimer, QPropertyAnimation, QEasingCurve, QPoint,
@@ -24,8 +23,8 @@ EXPANDED_HEIGHT = 84
 TOP_MARGIN = 12      # 距屏幕顶部距离
 
 # ── IDLE 透明度 ──
-IDLE_OPACITY = 0.30
-ACTIVE_OPACITY = 0.92
+IDLE_OPACITY = 0.82
+ACTIVE_OPACITY = 0.98
 
 
 class DynamicIsland(QWidget):
@@ -56,29 +55,7 @@ class DynamicIsland(QWidget):
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
         self.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating)
         self.setFixedSize(CAPSULE_WIDTH, CAPSULE_HEIGHT)
-        self.setMouseTracking(True)
-
-        # Windows 毛玻璃效果（DWM）
-        self._enable_acrylic()
-
-    def _enable_acrylic(self):
-        """Windows 10/11 Acrylic 模糊背景"""
-        try:
-            hwnd = int(self.winId())
-            accent = ctypes.create_string_buffer(16)
-            # AccentState = 3 (ACCENT_ENABLE_BLURBEHIND)
-            # GradientColor = 0 (transparent)
-            ctypes.memmove(ctypes.addressof(accent) + 0, b'\x03\x00\x00\x00', 4)
-            ctypes.memmove(ctypes.addressof(accent) + 8, b'\x00\x00\x00\x00', 4)
-            ctypes.memmove(ctypes.addressof(accent) + 12, b'\x00\x00\x00\x00', 4)
-
-            ctypes.windll.user32.SetWindowCompositionAttribute(
-                hwnd,
-                ctypes.byref(accent),
-                0
-            )
-        except Exception:
-            pass  # 非 Windows 或 API 不可用时静默跳过
+        self.setMouseTracking(True)  # 非 Windows 或 API 不可用时静默跳过
 
     def _setup_timers(self):
         # 本地计时器（每秒更新）

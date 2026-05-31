@@ -218,6 +218,5 @@ class ReasonixMonitor:
             status=status, message=message,
             timestamp=datetime.now().isoformat(),
         )
-        write_status_manually(status, message, "reasonix")
         if self._on_status:
             self._on_status(msg)

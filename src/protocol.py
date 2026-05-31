@@ -75,4 +75,4 @@ class StatusMessage:
 # 悬浮窗堆叠常量
 CAPSULE_GAP = 8          # 窗口间距
 MAX_VISIBLE_OVERLAYS = 6  # 最多同时显示
-IDLE_HIDE_TIMEOUT_MS = 5000  # idle 后隐藏延时
+IDLE_HIDE_TIMEOUT_MS = 120000  # idle 后隐藏延时（2 分钟）
